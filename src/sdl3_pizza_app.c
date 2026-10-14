@@ -1,7 +1,5 @@
 #include <stdio.h>  // For printf()
-#include <stdlib.h>
 #include <stdint.h> // For integer-related type aliases
-#include <math.h>
 
 #include <SDL3/SDL.h> // For opening a window
 #include <SDL3_mixer/SDL_mixer.h> // For sound effects
@@ -17,16 +15,6 @@
 #endif
 
 #include "colors.h" // Color name macros in capital found here 
-
-// For differentiating what the program is doing and what GUI elements need to be displayed
-enum MODE
-{
-	MODE_INIT,
-	MODE_ORDER_TYPE,
-	MODE_CUSTOMER_INFO,
-	MODE_MENU,
-	MODE_ALL_ORDERS
-};
 
 int main(void)
 {
@@ -63,17 +51,18 @@ int main(void)
 	
 	SDL_Texture* canvas = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, SCREEN.w, SCREEN.h);
 
-	GUI_Text title = {0};
+	GUI_Label title = {0};
 	title.color = DARK_BLUE;
-	title.color.a = 0;
+	title.color.a = 0.0f;
+	title.text = "Pizza App";
+	update_text(&title.texture, &title.rect, renderer, font, title.color, title.text);
 
-	title.real_alpha = 0.0f;
-	title.texture = update_text(renderer, font, title.color, "Pizza App");
-
-	SDL_GetTextureSize(title.texture, &title.rect.w, &title.rect.h);
 	center_rect_to(&title.rect, SCREEN);
-
 	title.rect.y = -title.rect.h;
+	title.start = (v2){{ title.rect.x, title.rect.y }};
+	title.end   = (v2){ title.rect.x, SCREEN.h * 0.12};
+
+	title.alpha_dist = (v2){{ 0.0f, 1.0f }};
 
 	SDL_ShowWindow(window);
 	
@@ -87,13 +76,37 @@ int main(void)
 	real64 elapsed_time = 0.0f;
 
 	GUI_Button button = create_button(renderer, font, button_texture, "Order", DARK_BLUE);
-
 	GUI_Button button2 = create_button(renderer, font, button_texture, "Exit", DARK_BLUE);
 	button2.rect.y += button2.rect.h * 1.33;
-	center_rect_to(&button2.text.rect, button2.rect);
+
+	GUI_Button pickup_button = create_button(renderer, font, button_texture, "Pickup", DARK_BLUE);
+	GUI_Button delivery_button = create_button(renderer, font, button_texture, "Delivery", DARK_BLUE);
+	pickup_button.rect.x -= pickup_button.rect.w * 0.7;
+	pickup_button.rect.y += pickup_button.rect.h * 0.33;
+	pickup_button.color.a = 0.0f;
+	pickup_button.label.color.a = 0.0f;
+	
+	delivery_button.rect.x += delivery_button.rect.w * 0.7;
+	delivery_button.rect.y += delivery_button.rect.h * 0.33;
+	delivery_button.color.a = 0.0f;
+	delivery_button.label.color.a = 0.0f;
+	
+	center_rect_to(&button2.label.rect, button2.rect);
+	
+	center_rect_to(&pickup_button.label.rect, pickup_button.rect);
+	center_rect_to(&delivery_button.label.rect, delivery_button.rect);
 
 	int32 program_mode = MODE_INIT;
-	
+
+	real32 global_seconds = 2.0f;
+
+	bool32 for_pickup = FALSE;
+
+	// Global Array of Structs to store order data and display its info.
+	Customer orders[50] = {0};
+
+
+	// Main loop of the program
 	while (!quit)
 	{
 		calculate_delta_time(&dt, &now, &last);
@@ -106,33 +119,58 @@ int main(void)
 		{
 		case MODE_INIT:
 		{
-			if (SDL_PointInRectFloat(&cursor, &button.rect)) { brighten_color(&button.color, button.orig_color, &dt, 0.1f); }
-			else                                             { reset_color(&button.color, button.orig_color, &dt, 0.1f); }
+			if (SDL_PointInRectFloat(&cursor, &button.rect))  { brighten_color(&button.color, button.orig_color, &dt, 0.1f); }
+			else                                              { reset_color(&button.color, button.orig_color, &dt, 0.1f); }
 
 			if (SDL_PointInRectFloat(&cursor, &button2.rect)) { brighten_color(&button2.color, button2.orig_color, &dt, 0.1f); }
 			else                                              { reset_color(&button2.color, button2.orig_color, &dt, 0.1f); }
 
-			title.real_alpha = r64_lerp(title.real_alpha, 255.0f, dt / 2);
-			title.color.a = (uint8)title.real_alpha;
-
-			title.rect.y = r32_lerp(title.rect.y, SCREEN.h * 0.12, dt);
-
-			SDL_SetTextureAlphaMod(title.texture, title.color.a);
+			title.lerp_t += dt / global_seconds;
+			
+			title.rect.y  = r32_ease_in_out(title.lerp_t, title.start.y, title.end.y);
+			title.color.a = r32_ease_in_out(title.lerp_t, title.alpha_dist.start, title.alpha_dist.end);
 		} break;
 		case MODE_ORDER_TYPE:
 		{
-			button.color.a = r32_lerp(button.color.a, 0.0f, dt * 5);
-			button.text.color.a = r32_lerp(button.text.color.a, 0.0f, dt * 5);
+			if (SDL_PointInRectFloat(&cursor, &pickup_button.rect))   { brighten_color(&pickup_button.color, pickup_button.orig_color, &dt, 0.1f); }
+			else                                                      { reset_color(&pickup_button.color, pickup_button.orig_color, &dt, 0.1f); }
 
-			button2.color.a = r32_lerp(button2.color.a, 0.0f, dt * 5);
-			button2.text.color.a = r32_lerp(button2.text.color.a, 0.0f, dt * 5);
+			if (SDL_PointInRectFloat(&cursor, &delivery_button.rect)) { brighten_color(&delivery_button.color, delivery_button.orig_color, &dt, 0.1f); }
+			else                                                      { reset_color(&delivery_button.color, delivery_button.orig_color, &dt, 0.1f); }
 
-			title.real_alpha = r64_lerp(title.real_alpha, 0.0f, dt / 2);
-			title.color.a = (uint8)title.real_alpha;
+			fade_button(&button,  dt / global_seconds);
+			fade_button(&button2, dt / global_seconds);
 
-			title.rect.y = r32_lerp(title.rect.y, -title.rect.h, dt);
+			if (strcmp(title.text, "Choose Method") == 0)
+			{
+				fade_button(&pickup_button,  dt / global_seconds);
+				fade_button(&delivery_button, dt / global_seconds);
+			}
+			
+			title.lerp_t += dt / global_seconds;
 
-			SDL_SetTextureAlphaMod(title.texture, title.color.a);
+			title.rect.y  = r32_ease_in_out(title.lerp_t, title.start.y, title.end.y);
+			title.color.a = r32_ease_in_out(title.lerp_t, title.alpha_dist.start, title.alpha_dist.end);
+
+			if (title.lerp_t >= 1.0f && strcmp(title.text, "Pizza App") == 0)
+			{
+				title.text = "Choose Method";
+				update_text(&title.texture, &title.rect, renderer, font, title.color, title.text);
+				center_rect_to(&title.rect, SCREEN);
+				title.rect.y = -title.rect.h;
+				
+				title.lerp_t = 0.0f;
+				
+				title.start = (v2){{ title.rect.x, -title.rect.h }};
+				title.end   = (v2){{ title.rect.x, SCREEN.h * 0.12 }};
+
+				title.alpha_dist = (v2){{ 0.0f, 1.0f }};
+			}
+		} break;
+		case MODE_CUSTOMER_INFO:
+		{
+			fade_button(&pickup_button,  dt / global_seconds);
+			fade_button(&delivery_button, dt / global_seconds);
 		} break;
 		}
 		while (SDL_PollEvent(&event))
@@ -154,12 +192,19 @@ int main(void)
 					{
 						if (SDL_PointInRectFloat(&cursor, &button.rect))
 						{
+							reset_label_lerp_data(&title);
+							global_seconds = 0.8f;
 							program_mode = MODE_ORDER_TYPE;
 							button.color = BLACK;
+							
+							reset_button_lerp_data(&button);
+							reset_button_lerp_data(&button2);
 						}
 						else
 						{
+							real32 alpha = button.color.a;
 							button.color = button2.orig_color;
+							button.color.a = alpha;
 						}
 						if (SDL_PointInRectFloat(&cursor, &button2.rect))
 						{
@@ -168,7 +213,42 @@ int main(void)
 						}
 						else
 						{
+							real32 alpha = button.color.a;
 							button.color = button2.orig_color;
+							button.color.a = alpha;
+						}
+					} break;
+					case MODE_ORDER_TYPE:
+					{
+						if (SDL_PointInRectFloat(&cursor, &pickup_button.rect))
+						{
+							reset_button_lerp_data(&pickup_button);
+							reset_button_lerp_data(&delivery_button);
+							
+							program_mode = MODE_CUSTOMER_INFO;
+							for_pickup = TRUE;
+							pickup_button.color = BLACK;
+						}
+						else
+						{
+							real32 alpha = pickup_button.color.a;
+							pickup_button.color = pickup_button.orig_color;
+							pickup_button.color.a = alpha;
+						}
+						if (SDL_PointInRectFloat(&cursor, &delivery_button.rect))
+						{
+							reset_button_lerp_data(&pickup_button);
+							reset_button_lerp_data(&delivery_button);
+							
+							program_mode = MODE_CUSTOMER_INFO;
+							for_pickup = FALSE;
+							delivery_button.color = BLACK;
+						}
+						else
+						{
+							real32 alpha = delivery_button.color.a;
+							delivery_button.color = delivery_button.orig_color;
+							delivery_button.color.a = alpha;
 						}
 					} break;
 					}
@@ -181,9 +261,13 @@ int main(void)
 		SDL_SetRenderDrawColor(renderer, 230, 230, 255, 255);
 		SDL_RenderClear(renderer);
 
-		render_gui_element(renderer, &title,  TYPE_GUI_TEXT);
+		render_gui_element(renderer, &title,  TYPE_GUI_LABEL);
+
 		render_gui_element(renderer, &button, TYPE_GUI_BUTTON);
 		render_gui_element(renderer, &button2, TYPE_GUI_BUTTON);
+		
+		if (program_mode != MODE_INIT) { render_gui_element(renderer, &pickup_button, TYPE_GUI_BUTTON); }
+		if (program_mode != MODE_INIT) { render_gui_element(renderer, &delivery_button, TYPE_GUI_BUTTON); }
 
 		SDL_SetRenderTarget(renderer, NULL);
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
