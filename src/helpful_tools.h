@@ -2,6 +2,7 @@
 #define HELPFUL_TOOLS_H
 
 #include <stdint.h> // For integer-related type aliases
+#include <stdlib.h> // For malloc() and calloc()
 
 #include <SDL3/SDL.h> // For opening a window
 #include <SDL3_mixer/SDL_mixer.h> // For sound effects
@@ -38,7 +39,7 @@ enum GUI_ELEMENTS
 {
 	TYPE_GUI_LABEL,
 	TYPE_GUI_BUTTON,
-	TYPE_GUI_DROPLIST
+	TYPE_GUI_TEXTBOX
 };
 
 // For differentiating what the program is doing and what GUI elements need to be displayed
@@ -51,6 +52,7 @@ enum MODE
 	MODE_ALL_ORDERS
 };
 
+// For simple 2D data, union is used such that x = start and y = end, so I can use both names.
 typedef union
 {
 	struct
@@ -62,6 +64,13 @@ typedef union
 		real32 start, end;
 	};
 } v2;
+
+// Storing frame data from an entire texture, a.k.a. a sprite sheet.
+typedef struct
+{
+	SDL_FRect *frames;
+	int32 total_frames;
+} Frame_Src;
 
 // Struct to hold GUI element data in.
 typedef struct
@@ -95,8 +104,38 @@ typedef struct
 
 	real64 lerp_t;
 	
-	bool32 clicked;
+	bool32 clickable;
 } GUI_Button;
+
+// Struct to hold GUI element data in.
+typedef struct
+{
+	SDL_Texture *texture;
+	Frame_Src *frame_src;
+
+	GUI_Label label;
+	GUI_Label input_label;
+
+	// These are for scaling textboxes without having to create multiple asset files.
+	SDL_FRect corners[4];
+	SDL_FRect horiz_sides[2];
+	SDL_FRect vert_sides[2];
+	SDL_FRect center;
+
+	SDL_FRect total_rect;
+	
+	SDL_FRect pointer;
+	SDL_FColor color;
+
+	v2 alpha_dist;
+
+	real64 lerp_t;
+
+	int32 pointer_pos;
+	
+	bool32 clickable;
+	bool32 clicked;
+} GUI_Textbox;
 
 // Struct to hold data for different pizza types
 typedef struct
@@ -123,6 +162,10 @@ typedef struct
 } Customer;
 
 // Function declarations
+
+static inline real32 calculate_frames(SDL_Texture *texture, uint32 frame_width, uint32 frame_height);
+
+static inline Frame_Src create_frame_src(SDL_Texture *texture, int32 frame_width, int32 frame_height);
 
 static inline void fade_button(GUI_Button *button, real32 value);
 
@@ -160,9 +203,60 @@ static inline void reset_color(SDL_FColor *color, SDL_FColor orig_color, real64 
 
 static inline GUI_Button create_button(SDL_Renderer *renderer, TTF_Font *font, SDL_Texture *texture, char *text, SDL_FColor color);
 
+static inline GUI_Textbox create_textbox(SDL_Renderer *renderer, SDL_Texture *texture, Frame_Src *src, SDL_FRect total_area);
+
+static inline void reposition_textbox(GUI_Textbox *textbox);
+
+static inline void textbox_read_input(GUI_Textbox *textbox, int32 key);
+
 #ifdef HELPFUL_TOOLS_IMPLEMENTATION
 
 // Function definitions
+
+// Calculates the amount of frames in a sprite sheet, goes from top to bottom, left to right.
+static inline real32 calculate_frames(SDL_Texture *texture, uint32 frame_width, uint32 frame_height)
+{
+	real32 w, h;
+	SDL_GetTextureSize(texture, &w, &h);
+
+	w = (uint32)w;
+	h = (uint32)h;
+	
+	uint32 frames_x = w / frame_width;
+    uint32 frames_y = h / frame_height;
+	uint32 total_frames = frames_x * frames_y;
+
+	return total_frames;
+}
+
+// Allocates memory for the frame data
+static inline Frame_Src create_frame_src(SDL_Texture *texture, int32 frame_width, int32 frame_height)
+{
+	Frame_Src frame_data = {0};
+	
+    int32 offset_x = 0;
+	int32 offset_y = 0;
+
+	real32 w, h;
+	SDL_GetTextureSize(texture, &w, &h);
+
+	frame_data.total_frames = calculate_frames(texture, frame_width, frame_height);
+
+	frame_data.frames = calloc(frame_data.total_frames, sizeof(SDL_FRect));
+	
+	for (int32 i = 0; i < frame_data.total_frames; i++)
+	{		
+		if (offset_x + frame_width > w)
+		{
+			offset_x = 0;
+			offset_y += frame_height;
+		}
+		frame_data.frames[i] = (SDL_FRect){offset_x, offset_y, frame_width, frame_height};
+		offset_x += frame_width;
+	}
+
+	return frame_data;
+}
 
 // Moved to its own inline function to keep verbosity low.
 static inline void fade_button(GUI_Button *button, real32 value)
@@ -268,6 +362,23 @@ static inline void render_gui_element(SDL_Renderer *renderer, void* element, int
 		
 		SDL_SetTextureColorModFloat(button->label.texture, 1.0f, 1.0f, 1.0f);
 		SDL_SetTextureAlphaModFloat(button->label.texture, 1.0f);
+	} break;
+	case TYPE_GUI_TEXTBOX:
+	{
+		GUI_Textbox *textbox = (GUI_Textbox *)element;
+
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[0], &textbox->corners[0]);
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[2], &textbox->corners[1]);
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[6], &textbox->corners[2]);
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[8], &textbox->corners[3]);
+
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[1], &textbox->horiz_sides[0]);
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[7], &textbox->horiz_sides[1]);
+
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[3], &textbox->vert_sides[0]);
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[5], &textbox->vert_sides[1]);
+
+		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[4], &textbox->center);
 	} break;
 	}
 }
@@ -434,6 +545,7 @@ static inline GUI_Button create_button(SDL_Renderer *renderer, TTF_Font *font, S
 	button.rect = (SDL_FRect){0, 0, 369, 166};
 	button.orig_color = color;
 	button.color = color;
+	button.clickable = FALSE;
 	center_rect_to(&button.rect, SCREEN);
 	button.label.color = (SDL_FColor){1.0f, 1.0f, 1.0f, 1.0f};
 	button.label.text = text;
@@ -443,6 +555,85 @@ static inline GUI_Button create_button(SDL_Renderer *renderer, TTF_Font *font, S
 	center_rect_to(&button.label.rect, button.rect);
 
 	return button;
+}
+
+// Repeated filling out of values for GUI_Button has it's own function, using 9-splicing to create a textbox of virtually any size.
+static inline GUI_Textbox create_textbox(SDL_Renderer *renderer, SDL_Texture *texture, Frame_Src *src, SDL_FRect total_area)
+{
+	real32 horiz_length = total_area.w - 36.0f;
+	real32 vert_height = total_area.h - 36.0f;
+	
+	GUI_Textbox textbox =
+	{
+		.frame_src = src,
+
+		.total_rect = total_area,
+
+		.corners[0] = (SDL_FRect){total_area.x, total_area.y, 18.0f, 18.0f},
+		.corners[1] = (SDL_FRect){total_area.x + horiz_length + 18.0f, total_area.y, 18.0f, 18.0f},
+		.corners[2] = (SDL_FRect){total_area.x, total_area.y + vert_height + 18.0f, 18.0f, 18.0f},
+		.corners[3] = (SDL_FRect){total_area.x + horiz_length + 18.0f, total_area.y + vert_height + 18.0f, 18.0f, 18.0f},
+		
+		.horiz_sides[0] = (SDL_FRect){textbox.corners[0].x + textbox.corners[0].w, textbox.corners[0].y, horiz_length, 18.0f},
+		.horiz_sides[1] = (SDL_FRect){textbox.corners[2].x + textbox.corners[2].w, textbox.corners[2].y, horiz_length, 18.0f},
+
+		.vert_sides[0] = (SDL_FRect){textbox.corners[0].x, textbox.corners[0].y + textbox.corners[0].h, 18.0f, vert_height},
+		.vert_sides[1] = (SDL_FRect){textbox.corners[1].x, textbox.corners[1].y + textbox.corners[1].h, 18.0f, vert_height},
+		
+		.center = (SDL_FRect){textbox.corners[0].x + textbox.corners[0].w, textbox.corners[0].y + textbox.corners[0].h, horiz_length, vert_height},
+
+		.texture = texture,
+		.alpha_dist = (v2){{ 0.0f, 1.0f }},
+
+		.pointer.w = 4.0f,
+		.pointer.h = 40.0f,
+
+		.pointer.x = total_area.x,
+		.pointer.y = total_area.y,
+
+		// Set bounds for text size to be in a range of 0-96, 97 here includes the null terminator,
+		// which tells C when a string ends.
+		
+		.input_label.text = calloc(97, sizeof(char)),
+		.pointer_pos = 0,
+	};
+
+	return textbox;
+}
+
+static inline void reposition_textbox(GUI_Textbox *textbox)
+{
+	real32 horiz_length = textbox->total_rect.w - 36.0f;
+	real32 vert_height = textbox->total_rect.h - 36.0f;
+	
+	textbox->corners[0] = (SDL_FRect){textbox->total_rect.x, textbox->total_rect.y, 18.0f, 18.0f};
+	textbox->corners[1] = (SDL_FRect){textbox->total_rect.x + horiz_length + 18.0f, textbox->total_rect.y, 18.0f, 18.0f};
+	textbox->corners[2] = (SDL_FRect){textbox->total_rect.x, textbox->total_rect.y + vert_height + 18.0f, 18.0f, 18.0f};
+	textbox->corners[3] = (SDL_FRect){textbox->total_rect.x + horiz_length + 18.0f, textbox->total_rect.y + vert_height + 18.0f, 18.0f, 18.0f};
+		
+	textbox->horiz_sides[0] = (SDL_FRect){textbox->corners[0].x + textbox->corners[0].w, textbox->corners[0].y, horiz_length, 18.0f};
+	textbox->horiz_sides[1] = (SDL_FRect){textbox->corners[2].x + textbox->corners[2].w, textbox->corners[2].y, horiz_length, 18.0f};
+
+	textbox->vert_sides[0] = (SDL_FRect){textbox->corners[0].x, textbox->corners[0].y + textbox->corners[0].h, 18.0f, vert_height};
+	textbox->vert_sides[1] = (SDL_FRect){textbox->corners[1].x, textbox->corners[1].y + textbox->corners[1].h, 18.0f, vert_height};
+		
+	textbox->center = (SDL_FRect){textbox->corners[0].x + textbox->corners[0].w, textbox->corners[0].y + textbox->corners[0].h, horiz_length, vert_height};
+
+	textbox->pointer.w = 4.0f;
+	textbox->pointer.h = 40.0f;
+
+	textbox->pointer.x = textbox->total_rect.x + (4.0 * textbox->pointer.w);
+	textbox->pointer.y = textbox->total_rect.y + (0.25 * textbox->pointer.h);
+}
+
+static inline void textbox_read_input(GUI_Textbox *textbox, int32 key)
+{
+	if (!textbox || !textbox->clicked) { return; }
+
+	if (textbox->pointer_pos > 97) { return; }
+
+	textbox->input_label.text[textbox->pointer_pos] = (char)key;
+	textbox->pointer_pos++;
 }
 
 #endif // HELPFUL_TOOLS_IMPLEMENTATION
