@@ -3,6 +3,7 @@
 
 #include <stdint.h> // For integer-related type aliases
 #include <stdlib.h> // For malloc() and calloc()
+#include <string.h> // For strlen()
 
 #include <SDL3/SDL.h> // For opening a window
 #include <SDL3_mixer/SDL_mixer.h> // For sound effects
@@ -130,9 +131,11 @@ typedef struct
 	v2 alpha_dist;
 
 	real64 lerp_t;
+	real64 pointer_switch_time;
 
 	int32 pointer_pos;
-	
+
+	bool32 pointer_visible;
 	bool32 clickable;
 	bool32 clicked;
 } GUI_Textbox;
@@ -141,21 +144,21 @@ typedef struct
 typedef struct
 {
 	SDL_Texture *texture;
-	char *name;
+
+	GUI_Label name_label;
+	GUI_Label price_label;
+	GUI_Label description_label;
 	
 	SDL_FRect rect;
 	
-	int32 price;
+	real32 price;
 } Pizza;
 
 // Struct to hold data for all orders done in a session.
 typedef struct
 {
-	Pizza *pizzas;
-	
 	char *name;
 	char *address;
-	
 	int32 phone_number;
 
 	bool32 for_pickup;
@@ -169,7 +172,7 @@ static inline Frame_Src create_frame_src(SDL_Texture *texture, int32 frame_width
 
 static inline void fade_button(GUI_Button *button, real32 value);
 
-static inline void reset_button_lerp_data(GUI_Button *button);
+static inline void reset_element_lerp_data(void *element, int32 type);
 
 static inline void reset_label_lerp_data(GUI_Label *label);
 
@@ -203,11 +206,11 @@ static inline void reset_color(SDL_FColor *color, SDL_FColor orig_color, real64 
 
 static inline GUI_Button create_button(SDL_Renderer *renderer, TTF_Font *font, SDL_Texture *texture, char *text, SDL_FColor color);
 
-static inline GUI_Textbox create_textbox(SDL_Renderer *renderer, SDL_Texture *texture, Frame_Src *src, SDL_FRect total_area);
+static inline GUI_Textbox create_textbox(char *title, SDL_FColor color, SDL_Renderer *renderer, TTF_Font *font, SDL_Texture *texture, Frame_Src *src, SDL_FRect total_area);
 
-static inline void reposition_textbox(GUI_Textbox *textbox);
+static inline void reposition_textbox(GUI_Textbox *textbox, SDL_Renderer *renderer, TTF_Font *font);
 
-static inline void textbox_read_input(GUI_Textbox *textbox, int32 key);
+static inline void textbox_read_input(SDL_Renderer *renderer, TTF_Font *font, GUI_Textbox *textbox, char key);
 
 #ifdef HELPFUL_TOOLS_IMPLEMENTATION
 
@@ -268,12 +271,33 @@ static inline void fade_button(GUI_Button *button, real32 value)
 }
 
 // Moved to its own inline function to keep verbosity low.
-static inline void reset_button_lerp_data(GUI_Button *button)
+static inline void reset_element_lerp_data(void *element, int32 type)
 {
-	button->alpha_dist = (v2){{ 1.0f, 0.0f }};
-	button->label.alpha_dist = (v2){{ 1.0f, 0.0f }};
-	button->lerp_t = 0.0f;
-	button->label.lerp_t = 0.0f;
+	switch (type)
+	{
+	case TYPE_GUI_BUTTON:
+	{
+		GUI_Button *button = (GUI_Button *)element;
+		
+		button->alpha_dist = (v2){{ 1.0f, 0.0f }};
+		button->label.alpha_dist = (v2){{ 1.0f, 0.0f }};
+		button->lerp_t = 0.0f;
+		button->label.lerp_t = 0.0f;
+	} break;
+	case TYPE_GUI_TEXTBOX:
+	{
+		GUI_Textbox *textbox = (GUI_Textbox *)element;
+
+		textbox->lerp_t = 0.0f;
+		textbox->alpha_dist = (v2){{ 1.0f, 0.0f }};
+		
+		textbox->label.lerp_t = 0.0f;
+		textbox->label.alpha_dist = (v2){{ 1.0f, 0.0f }};
+		
+		textbox->input_label.lerp_t = 0.0f;
+		textbox->input_label.alpha_dist = (v2){{ 1.0f, 0.0f }};
+	} break;
+	}
 }
 
 // Moved to its own inline function to keep verbosity low.
@@ -367,6 +391,9 @@ static inline void render_gui_element(SDL_Renderer *renderer, void* element, int
 	{
 		GUI_Textbox *textbox = (GUI_Textbox *)element;
 
+		// Render all seperate 9 pieces to give an appearance of smooth scaling.
+		SDL_SetTextureAlphaModFloat(textbox->texture, textbox->color.a);
+		
 		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[0], &textbox->corners[0]);
 		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[2], &textbox->corners[1]);
 		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[6], &textbox->corners[2]);
@@ -379,6 +406,36 @@ static inline void render_gui_element(SDL_Renderer *renderer, void* element, int
 		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[5], &textbox->vert_sides[1]);
 
 		SDL_RenderTexture(renderer, textbox->texture, &textbox->frame_src->frames[4], &textbox->center);
+
+		SDL_SetTextureAlphaModFloat(textbox->texture, 1.0f);
+
+		// Render the input in the textbox
+		SDL_SetTextureColorModFloat(textbox->input_label.texture, textbox->input_label.color.r, textbox->input_label.color.g, textbox->input_label.color.b);
+		SDL_SetTextureAlphaModFloat(textbox->input_label.texture, textbox->input_label.color.a);
+		
+		SDL_RenderTexture(renderer, textbox->input_label.texture, NULL, &textbox->input_label.rect);
+
+		SDL_SetTextureColorModFloat(textbox->input_label.texture, 1.0f, 1.0f, 1.0f);
+		SDL_SetTextureAlphaModFloat(textbox->input_label.texture, 1.0f);
+
+		// Render the textbox titile, we care about color + alpha modulation here thus the functions from before.
+		SDL_SetTextureColorModFloat(textbox->label.texture, textbox->label.color.r, textbox->label.color.g, textbox->label.color.b);
+		SDL_SetTextureAlphaModFloat(textbox->label.texture, textbox->label.color.a);
+		
+		SDL_RenderTexture(renderer, textbox->label.texture, NULL, &textbox->label.rect);
+		
+
+		// Then we reset the modulation here as we have already rendered our target GUI element.
+		SDL_SetTextureColorModFloat(textbox->label.texture, 1.0f, 1.0f, 1.0f);
+		SDL_SetTextureAlphaModFloat(textbox->label.texture, 1.0f);
+
+		// Render the pointer
+		if (textbox->clicked && textbox->pointer_visible)
+		{
+			SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+			SDL_RenderFillRect(renderer, &textbox->pointer);
+			SDL_SetRenderDrawColor(renderer, 230, 230, 255, 255);
+		}
 	} break;
 	}
 }
@@ -558,7 +615,7 @@ static inline GUI_Button create_button(SDL_Renderer *renderer, TTF_Font *font, S
 }
 
 // Repeated filling out of values for GUI_Button has it's own function, using 9-splicing to create a textbox of virtually any size.
-static inline GUI_Textbox create_textbox(SDL_Renderer *renderer, SDL_Texture *texture, Frame_Src *src, SDL_FRect total_area)
+static inline GUI_Textbox create_textbox(char *title, SDL_FColor color, SDL_Renderer *renderer, TTF_Font *font, SDL_Texture *texture, Frame_Src *src, SDL_FRect total_area)
 {
 	real32 horiz_length = total_area.w - 36.0f;
 	real32 vert_height = total_area.h - 36.0f;
@@ -591,17 +648,31 @@ static inline GUI_Textbox create_textbox(SDL_Renderer *renderer, SDL_Texture *te
 		.pointer.x = total_area.x,
 		.pointer.y = total_area.y,
 
-		// Set bounds for text size to be in a range of 0-96, 97 here includes the null terminator,
+		// Set bounds for text size to be in a range of 0-40, 41 here includes the null terminator,
 		// which tells C when a string ends.
 		
-		.input_label.text = calloc(97, sizeof(char)),
+		.input_label.text = calloc(41, sizeof(char)),
 		.pointer_pos = 0,
+
+		.input_label.rect.x = total_area.x,
+		.input_label.rect.y = total_area.y,
+
+		.label.text = title,
+		.label.color = color,
+	    .label.orig_color = color
 	};
+
+	update_text(&textbox.label.texture, &textbox.label.rect, renderer, font, color, textbox.label.text);
+	textbox.label.rect.x = total_area.x;
+	textbox.label.rect.y = total_area.y - textbox.label.rect.w;
+
+	textbox.input_label.alpha_dist = (v2){{ 0.0f, 1.0f }};
+	textbox.input_label.color = (SDL_FColor){0.0f, 0.0f, 0.0f, 1.0f};
 
 	return textbox;
 }
 
-static inline void reposition_textbox(GUI_Textbox *textbox)
+static inline void reposition_textbox(GUI_Textbox *textbox, SDL_Renderer *renderer, TTF_Font *font)
 {
 	real32 horiz_length = textbox->total_rect.w - 36.0f;
 	real32 vert_height = textbox->total_rect.h - 36.0f;
@@ -624,16 +695,52 @@ static inline void reposition_textbox(GUI_Textbox *textbox)
 
 	textbox->pointer.x = textbox->total_rect.x + (4.0 * textbox->pointer.w);
 	textbox->pointer.y = textbox->total_rect.y + (0.25 * textbox->pointer.h);
+
+	textbox->input_label.rect.x = textbox->pointer.x;
+	textbox->input_label.rect.y = textbox->pointer.y;
+
+	textbox->label.rect.x = textbox->total_rect.x;
+	textbox->label.rect.y = textbox->total_rect.y - textbox->label.rect.h;
+
+	update_text(&textbox->label.texture, &textbox->label.rect, renderer, font, (SDL_FColor){1.0f, 1.0f, 1.0f, 1.0f}, textbox->label.text);
 }
 
-static inline void textbox_read_input(GUI_Textbox *textbox, int32 key)
+static inline void textbox_read_input(SDL_Renderer *renderer, TTF_Font *font, GUI_Textbox *textbox, char key)
 {
 	if (!textbox || !textbox->clicked) { return; }
 
-	if (textbox->pointer_pos > 97) { return; }
+	if (key != SDLK_BACKSPACE)
+	{
+		// Keep text array index within bounds
+		if (textbox->pointer_pos >= 40)
+		{
+			return;
+		}
+		
+		textbox->input_label.text[textbox->pointer_pos] = key;
+		textbox->pointer_pos++;
 
-	textbox->input_label.text[textbox->pointer_pos] = (char)key;
-	textbox->pointer_pos++;
+		real32 min = textbox->input_label.rect.x;
+		real32 max = textbox->input_label.rect.x + textbox->input_label.rect.w;
+	}
+	else
+	{
+		textbox->pointer_pos--;
+
+		// Keep text array index within bounds
+		if (textbox->pointer_pos < 0) { textbox->pointer_pos = 0; }
+		
+		textbox->input_label.text[textbox->pointer_pos] = '\0';
+	}
+
+	int32 char_width, char_height;
+	TTF_GetStringSize(font, "a", 1, &char_width, &char_height);
+		
+	textbox->pointer.x = (real32)char_width * textbox->pointer_pos + textbox->input_label.rect.x;
+
+	if (textbox->label.texture) { SDL_DestroyTexture(textbox->input_label.texture); }
+
+	update_text(&textbox->input_label.texture, &textbox->input_label.rect, renderer, font, (SDL_FColor){0, 0, 0, 1.0f}, textbox->input_label.text);
 }
 
 #endif // HELPFUL_TOOLS_IMPLEMENTATION

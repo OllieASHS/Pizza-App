@@ -18,11 +18,12 @@
 
 int main(void)
 {
-	// Initalize SDL 
+	/** Initalize SDL **/
 	SDL_Renderer *renderer = {0};
 	SDL_Window   *window   = {0};
 	SDL_Event    event     = {0};
-	
+
+	// Initalize the SDL Libraries
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
 	{
 		printf("Failed to init SDL.\n");
@@ -31,9 +32,14 @@ int main(void)
 
 	TTF_Init();
 	MIX_Init();
-	
-	TTF_Font *font = TTF_OpenFont("../fonts/Text.ttf", 80);
 
+	// Load all the fonts
+	TTF_Font *font = TTF_OpenFont("../fonts/Text.ttf", 80.0f);
+	TTF_Font *textbox_title_font = TTF_OpenFont("../fonts/Text.ttf", 60.0f);
+	TTF_Font *textbox_descr_font = TTF_OpenFont("../fonts/Text.ttf", 30.0f);
+	TTF_Font *textbox_font = TTF_OpenFont("../fonts/Code.ttf", 35.0f);
+
+	// Get operating system to create a window
 	window = SDL_CreateWindow("Pizza App", 1920, 1080, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
 	if (!window)
 	{
@@ -41,6 +47,7 @@ int main(void)
 		return 0;
 	}
 
+	// Get SDL to choose a graphics back end, OpenGL is common here
 	renderer = SDL_CreateRenderer(window, NULL);
 	if (!renderer)
 	{
@@ -48,9 +55,13 @@ int main(void)
 		return 0;
 	}
 
+	/** Initalize SDL end **/
+
+	// Load all the GUI textures
 	SDL_Texture *button_texture  = load_bmp_into_texture("../assets/Button.bmp",  "Button",  renderer);
 	SDL_Texture *textbox_texture = load_bmp_into_texture("../assets/Textbox.bmp", "Textbox", renderer);
 
+	// Slice textures into individual frames, this is helpful for animations or 9-splicing
 	Frame_Src textbox_src = create_frame_src(textbox_texture, 18, 18);
 	
 	// Main render target, we will render here so we can handle screen resizing.
@@ -66,31 +77,46 @@ int main(void)
 	center_rect_to(&title.rect, SCREEN);
 	title.rect.y = -title.rect.h;
 	title.start = (v2){{ title.rect.x, title.rect.y }};
-	title.end   = (v2){ title.rect.x, SCREEN.h * 0.12};
+	title.end   = (v2){{ title.rect.x, SCREEN.h * 0.12 }};
 
 	title.alpha_dist = (v2){{ 0.0f, 1.0f }};
 
 	SDL_ShowWindow(window);
 
-	// Global variables, quit will tell us when to exit the program, and the rest is for storing delta time to ensure stable behavior on different frame rates.
+	/** GLOBAL LOOP VARIABLES START **/
+
+	// Boolean to check if the user has quit the program.
 	bool32 quit = FALSE;
 
+	// Calculations using SDL to get delta time
 	uint64 now  = SDL_GetPerformanceCounter();
     uint64 last = 0;
 
+	// Where we store delta time
 	real64 dt = 0.0f;
 	
-	real64 elapsed_time = 0.0f;
-
 	// Get cursor image states
 	SDL_Cursor *cursor_normal = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
 	SDL_Cursor *cursor_hover  = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
 	SDL_Cursor *cursor_text   = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_TEXT);
 
-	// Initalize more GUI elements
-	GUI_Textbox textbox = create_textbox(renderer, textbox_texture, &textbox_src, (SDL_FRect){0, 0, 800, 60});
-	center_rect_to(&textbox.total_rect, SCREEN);
-	reposition_textbox(&textbox);
+	/** MENU TEXTBOX INITALIZE START **/
+	
+	GUI_Textbox name_textbox = create_textbox("Name", BLACK, renderer, textbox_title_font, textbox_texture, &textbox_src, (SDL_FRect){0, 0, 865, 60});
+	center_rect_to(&name_textbox.total_rect, SCREEN);
+	name_textbox.total_rect.y -= 200;
+	reposition_textbox(&name_textbox, renderer, textbox_title_font);
+
+	GUI_Textbox address_textbox = create_textbox("Address", BLACK, renderer, textbox_title_font, textbox_texture, &textbox_src, (SDL_FRect){0, 0, 865, 60});
+	center_rect_to(&address_textbox.total_rect, SCREEN);
+	reposition_textbox(&address_textbox, renderer, textbox_title_font);
+
+	GUI_Textbox phone_textbox = create_textbox("Phone Number", BLACK, renderer, textbox_title_font, textbox_texture, &textbox_src, (SDL_FRect){0, 0, 865, 60});
+	center_rect_to(&phone_textbox.total_rect, SCREEN);
+	phone_textbox.total_rect.y += 200;
+	reposition_textbox(&phone_textbox, renderer, textbox_title_font);
+
+	/** MENU TEXTBOX INITALIZE END **/
 	
 	GUI_Button button = create_button(renderer, font, button_texture, "Order", DARK_BLUE);
 	button.clickable = TRUE;
@@ -106,20 +132,37 @@ int main(void)
 	pickup_button.color.a = 0.0f;
 	pickup_button.label.color.a = 0.0f;
 
-	// Keeping track of a global array of these GUI elements to make it easy to loop through them to handle colors and cursor states.
-	#define ALL_BUTTONS 4
+	GUI_Button submit_button = create_button(renderer, font, button_texture, "Submit", DARK_BLUE);
+	submit_button.rect.y = SCREEN.h - submit_button.rect.h * 1.5f;
+	submit_button.color.a = 0.0f;
+	submit_button.label.color.a = 0.0f;
+
+	GUI_Textbox menu_background = create_textbox("", BLACK, renderer, textbox_title_font, textbox_texture, &textbox_src, (SDL_FRect){0, 0, (2 * SCREEN.w) / 3, 865});
+	center_rect_to(&menu_background.total_rect, SCREEN);
+	menu_background.total_rect.y += 150.0f;
+	reposition_textbox(&menu_background, renderer, textbox_title_font);
+	menu_background.color.a = 1.0f;
+	menu_background.clickable = FALSE;
+
+	// Keeping track of a global array of these GUI elements to make it easy to loop through them to handle logic associated with buttons.
+	#define ALL_BUTTONS 5
 	GUI_Button *all_buttons[ALL_BUTTONS] =
 	{
 		&button,
 		&button2,
 		&pickup_button,
-		&delivery_button
+		&delivery_button,
+		&submit_button
 	};
-	
-	#define ALL_TEXTBOXES 1
+
+	// Keeping track of a global array of these GUI elements to make it easy to loop through them to handle logic associated with textboxes.
+
+	#define ALL_TEXTBOXES 3
 	GUI_Textbox *all_textboxes[ALL_TEXTBOXES] =
 	{
-		&textbox
+		&name_textbox,
+		&address_textbox,
+		&phone_textbox
 	};
 	
 	delivery_button.rect.x += delivery_button.rect.w * 0.7;
@@ -132,20 +175,118 @@ int main(void)
 	center_rect_to(&pickup_button.label.rect, pickup_button.rect);
 	center_rect_to(&delivery_button.label.rect, delivery_button.rect);
 
+	center_rect_to(&submit_button.label.rect, submit_button.rect);
+
 	int32 program_mode = MODE_INIT;
 
 	real32 global_seconds = 2.0f;
 
-	bool32 for_pickup = FALSE;
+	int32 customer_index = 0;
 
 	// Global Array of Structs to store order data and display its info.
+	Pizza pizzas[12] = {0};
 	Customer orders[50] = {0};
+
+	/** PIZZA POSITIONAL VARIABLES START **/
+	
+	#define IMG_WIDTH  256.0f
+	#define IMG_HEIGHT 256.0f
+
+	real32 gap_offset = 100.0f;
+	real32 origin = (SCREEN.w / 2) - ((3 * IMG_WIDTH) / 2) - gap_offset;
+	
+	real32 loc_x = origin;
+	real32 loc_y = 300.0f;
+
+	real32 offset_y = 0.0f;
+
+	// List of names we will use
+	char *names[12] =
+	{
+		"Pepperoni Pizza",
+		"Meatlovers Pizza",
+		"Neapolitan Pizza",
+		"Pineapple Pizza",
+		"Vegeterian Pizza",
+		"Dessert Pizza",
+		"Hospitality Special",
+		"Freeman's Choice",
+		"Meatzza",
+		"Hall Pass Pizza",
+		"Coping Pizza",
+		"Dusung's Cake"
+	};
+
+	real32 prices[12] =
+	{
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f,
+		18.0f
+	};
+
+	/** PIZZA POSITIONAL VARIABLES END **/
+	
+	// Initialize all the pizza data so we select them and calculate prices
+	for (int32 i = 0; i < 12; i++)
+	{
+		char file[64];
+		char name[64];
+		char price[64];
+
+		snprintf(file, sizeof(file), "../assets/pizza%d.bmp", i+1);
+		snprintf(name, sizeof(name), "Pizza %d", i+1);
+		
+		snprintf(price, sizeof(price), "$%.2f", prices[i]);
+		
+		pizzas[i].texture = load_bmp_into_texture(file, name, renderer);
+		pizzas[i].rect = (SDL_FRect){loc_x, loc_y, IMG_WIDTH, IMG_HEIGHT};
+
+		pizzas[i].name_label.text = malloc(strlen(names[i]) + 1);
+		pizzas[i].name_label.color = BLACK;
+		update_text(&pizzas[i].name_label.texture, &pizzas[i].name_label.rect, renderer, textbox_descr_font, BLACK, names[i]);
+		
+		SDL_GetTextureSize(pizzas[i].name_label.texture, &pizzas[i].name_label.rect.w, &pizzas[i].name_label.rect.h);
+
+		center_rect_to(&pizzas[i].name_label.rect, pizzas[i].rect);
+		pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h);
+
+		pizzas[i].price_label.text = malloc(strlen(price) + 1);
+		pizzas[i].price_label.color = BLACK;
+		update_text(&pizzas[i].price_label.texture, &pizzas[i].price_label.rect, renderer, textbox_descr_font, BLACK, price);
+		
+		SDL_GetTextureSize(pizzas[i].price_label.texture, &pizzas[i].price_label.rect.w, &pizzas[i].price_label.rect.h);
+
+		center_rect_to(&pizzas[i].price_label.rect, pizzas[i].rect);
+		pizzas[i].price_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+		
+		loc_x += IMG_WIDTH + gap_offset;
+
+		if ((i+1) % 3 == 0)
+		{
+			loc_x = origin;
+			loc_y += IMG_HEIGHT + gap_offset;
+		}
+	}
+
+	SDL_FRect header = {0, 0, SCREEN.w, menu_background.total_rect.y + 3};
+	
+	const bool *keystate = SDL_GetKeyboardState(NULL);
+
+	/** GLOBAL LOOP VARIABLES END **/
 
 	// Main loop of the program
 	while (!quit)
 	{
 		calculate_delta_time(&dt, &now, &last);
-		elapsed_time += dt;
 
 		SDL_FPoint cursor = {0};
 		SDL_FRect canvas_rect = screen_to_window_visuals(renderer, &cursor);
@@ -179,7 +320,6 @@ int main(void)
 		case MODE_INIT:
 		{
 			// Checking both buttons if they are being hovered over, then we can use linear interpolation to smooth out the color.
-			
 			if (SDL_PointInRectFloat(&cursor, &button.rect))  { brighten_color(&button.color, button.orig_color, &dt, 0.1f); }
 			else                                              { reset_color(&button.color, button.orig_color, &dt, 0.1f); }
 
@@ -239,7 +379,29 @@ int main(void)
 			fade_button(&pickup_button,  dt / global_seconds);
 			fade_button(&delivery_button, dt / global_seconds);
 
+			fade_button(&submit_button,  dt / global_seconds);
+
 			title.lerp_t += dt / global_seconds;
+
+			if (SDL_PointInRectFloat(&cursor, &submit_button.rect))  { brighten_color(&submit_button.color, submit_button.orig_color, &dt, 0.1f); }
+			else                                                     { reset_color(&submit_button.color, submit_button.orig_color, &dt, 0.1f);    }
+			
+			for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+			{
+				all_textboxes[i]->lerp_t += dt / global_seconds;
+				all_textboxes[i]->color.a = r32_ease_in_out(all_textboxes[i]->lerp_t, all_textboxes[i]->alpha_dist.start, all_textboxes[i]->alpha_dist.end);
+
+				all_textboxes[i]->label.lerp_t += dt / global_seconds;
+				all_textboxes[i]->label.color.a = r32_ease_in_out(all_textboxes[i]->label.lerp_t, all_textboxes[i]->label.alpha_dist.start, all_textboxes[i]->label.alpha_dist.end);
+			
+				all_textboxes[i]->pointer_switch_time += dt;
+					
+				if (all_textboxes[i]->pointer_switch_time > 0.5f)
+				{
+					all_textboxes[i]->pointer_visible = !all_textboxes[i]->pointer_visible;
+					all_textboxes[i]->pointer_switch_time = 0.0f;
+				}
+			}
 
 			title.rect.y  = r32_ease_in_out(title.lerp_t, title.start.y, title.end.y);
 			title.color.a = r32_ease_in_out(title.lerp_t, title.alpha_dist.start, title.alpha_dist.end);
@@ -260,8 +422,57 @@ int main(void)
 				title.alpha_dist = (v2){{ 0.0f, 1.0f }};
 			}
 		} break;
+		case MODE_MENU:
+		{
+			fade_button(&submit_button,  dt / global_seconds);
+
+			title.lerp_t += dt / global_seconds;
+
+			title.rect.y  = r32_ease_in_out(title.lerp_t, title.start.y, title.end.y);
+			title.color.a = r32_ease_in_out(title.lerp_t, title.alpha_dist.start, title.alpha_dist.end);
+
+			for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+			{
+				all_textboxes[i]->lerp_t += dt / global_seconds;
+				all_textboxes[i]->color.a = r32_ease_in_out(all_textboxes[i]->lerp_t, all_textboxes[i]->alpha_dist.start, all_textboxes[i]->alpha_dist.end);
+
+				all_textboxes[i]->label.lerp_t += dt / global_seconds;
+				all_textboxes[i]->label.color.a = r32_ease_in_out(all_textboxes[i]->label.lerp_t, all_textboxes[i]->label.alpha_dist.start, all_textboxes[i]->label.alpha_dist.end);
+
+				all_textboxes[i]->input_label.lerp_t += dt / global_seconds;
+				all_textboxes[i]->input_label.color.a = r32_ease_in_out(all_textboxes[i]->input_label.lerp_t,
+																		all_textboxes[i]->input_label.alpha_dist.start,
+																		all_textboxes[i]->input_label.alpha_dist.end);
+			}
+			
+			// Same logic, we are transitioning titles, and reinitalizing title data.
+			if (title.lerp_t >= 1.0f && strcmp(title.text, "Enter Info") == 0)
+			{
+				title.text = "Menu";
+				update_text(&title.texture, &title.rect, renderer, font, title.color, title.text);
+				center_rect_to(&title.rect, SCREEN);
+				title.rect.y = -title.rect.h;
+				
+				title.lerp_t = 0.0f;
+				
+				title.start = (v2){{ title.rect.x, -title.rect.h }};
+				title.end   = (v2){{ title.rect.x, SCREEN.h * 0.12 }};
+
+				title.alpha_dist = (v2){{ 0.0f, 1.0f }};
+			}
+		} break;
 		}
 
+		if (keystate[SDL_SCANCODE_RETURN])
+		{
+			for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+			{
+				if (all_textboxes[i]->clicked) { all_textboxes[i]->clicked = FALSE; }
+			}
+		}
+
+		SDL_StartTextInput(window);
+		
 		// Use SDL to poll system level user input
 		while (SDL_PollEvent(&event))
 		{
@@ -275,9 +486,89 @@ int main(void)
 			} break;
 			case SDL_EVENT_KEY_DOWN:
 			{
-				if (event.key.key >= 'a' && event.key.key <= 'z')
+				switch (event.key.key)
 				{
-					textbox_read_input(&textbox, event.key.key);
+				case SDLK_BACKSPACE:
+				{
+					for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+					{
+						if (all_textboxes[i]->clicked) { textbox_read_input(renderer, textbox_font, all_textboxes[i], event.key.key); }
+					}
+				} break;
+				}
+			} break;
+			case SDL_EVENT_TEXT_INPUT:
+			{
+				for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+				{
+					for (int32 j = 0; event.text.text[j] != '\0'; j++)
+					{
+						char key = event.text.text[j];
+						if (all_textboxes[i]->clicked) { textbox_read_input(renderer, textbox_font, all_textboxes[i], key); }
+					}
+				}
+			} break;
+			case SDL_EVENT_MOUSE_WHEEL:
+			{
+				real32 scroll_y = event.wheel.y;
+
+				if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) { scroll_y *= -1.0f; }
+
+				if (scroll_y > 0.0f)
+				{
+					real32 max = 0.0f;
+					
+					offset_y += 25.0f;
+					offset_y = (offset_y > max) ? max : offset_y;
+					
+					loc_x = origin;
+					loc_y = 300.0f + offset_y;
+					for (int32 i = 0; i < 12; i++)
+					{
+						pizzas[i].rect = (SDL_FRect){loc_x, loc_y, IMG_WIDTH, IMG_HEIGHT};
+
+						center_rect_to(&pizzas[i].name_label.rect, pizzas[i].rect);
+						pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h / 3);
+		
+						center_rect_to(&pizzas[i].price_label.rect, pizzas[i].rect);
+						pizzas[i].price_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+
+						loc_x += IMG_WIDTH + gap_offset;
+
+						if ((i+1) % 3 == 0)
+						{
+							loc_x = origin;
+							loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+						}
+					}
+				}
+				else if (scroll_y < 0.0f)
+				{
+					real32 min = -((IMG_HEIGHT * 3) + gap_offset * 2);
+					
+					offset_y -= 25.0f;
+					offset_y = (offset_y < min) ? min : offset_y;
+					
+					loc_x = origin;
+					loc_y = 300.0f + offset_y;
+					for (int32 i = 0; i < 12; i++)
+					{
+						pizzas[i].rect = (SDL_FRect){loc_x, loc_y, IMG_WIDTH, IMG_HEIGHT};
+
+						center_rect_to(&pizzas[i].name_label.rect, pizzas[i].rect);
+						pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h / 3);
+
+						center_rect_to(&pizzas[i].price_label.rect, pizzas[i].rect);
+						pizzas[i].price_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+
+						loc_x += IMG_WIDTH + gap_offset;
+
+						if ((i+1) % 3 == 0)
+						{
+							loc_x = origin;
+							loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+						}
+					}
 				}
 			} break;
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -299,8 +590,8 @@ int main(void)
 							button.clickable = FALSE;
 							button2.clickable = FALSE;
 							
-							reset_button_lerp_data(&button);
-							reset_button_lerp_data(&button2);
+							reset_element_lerp_data(&button, TYPE_GUI_BUTTON);
+							reset_element_lerp_data(&button2, TYPE_GUI_BUTTON);
 						}
 						else
 						{
@@ -324,20 +615,28 @@ int main(void)
 					{
 						if (SDL_PointInRectFloat(&cursor, &pickup_button.rect) && pickup_button.clickable)
 						{
-							for_pickup = TRUE;
+							orders[customer_index].for_pickup = TRUE;
 							pickup_button.color = BLACK;
 							
 							reset_label_lerp_data(&title);
 							global_seconds = 0.8f;
 							
-							reset_button_lerp_data(&pickup_button);
-							reset_button_lerp_data(&delivery_button);
+							reset_element_lerp_data(&pickup_button, TYPE_GUI_BUTTON);
+							reset_element_lerp_data(&delivery_button, TYPE_GUI_BUTTON);
 
 							pickup_button.clickable = FALSE;
 							delivery_button.clickable = FALSE;
 							
 							program_mode = MODE_CUSTOMER_INFO;
-							textbox.clickable = TRUE;
+
+							submit_button.clickable = TRUE;
+							
+							name_textbox.clickable = TRUE;
+							name_textbox.alpha_dist = (v2){{0.0f, 1.0f}};
+							name_textbox.label.alpha_dist = (v2){{0.0f, 1.0f}};
+							
+							center_rect_to(&name_textbox.total_rect, SCREEN);
+							reposition_textbox(&name_textbox, renderer, textbox_title_font);
 						}
 						else
 						{
@@ -347,7 +646,7 @@ int main(void)
 						}
 						if (SDL_PointInRectFloat(&cursor, &delivery_button.rect) && delivery_button.clickable)
 						{
-							for_pickup = FALSE;
+							orders[customer_index].for_pickup = FALSE;
 							delivery_button.color = BLACK;
 
 							reset_label_lerp_data(&title);
@@ -356,11 +655,19 @@ int main(void)
 							pickup_button.clickable = FALSE;
 							delivery_button.clickable = FALSE;
 							
-							reset_button_lerp_data(&pickup_button);
-							reset_button_lerp_data(&delivery_button);
+							reset_element_lerp_data(&pickup_button, TYPE_GUI_BUTTON);
+							reset_element_lerp_data(&delivery_button, TYPE_GUI_BUTTON);
 
 							program_mode = MODE_CUSTOMER_INFO;
-							textbox.clickable = TRUE;
+
+							submit_button.clickable = TRUE;
+							
+							for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+							{
+								all_textboxes[i]->clickable = TRUE;
+								all_textboxes[i]->alpha_dist = (v2){{0.0f, 1.0f}};
+								all_textboxes[i]->label.alpha_dist = (v2){{0.0f, 1.0f}};
+							}
 						}
 						else
 						{
@@ -371,9 +678,57 @@ int main(void)
 					} break;
 					case MODE_CUSTOMER_INFO:
 					{
-						if (SDL_PointInRectFloat(&cursor, &textbox.total_rect) && textbox.clickable)
+						for (int32 i = 0; i < ALL_TEXTBOXES; i++)
 						{
-							textbox.clicked = TRUE;
+							if (SDL_PointInRectFloat(&cursor, &all_textboxes[i]->total_rect) && all_textboxes[i]->clickable)
+							{
+								all_textboxes[i]->clicked = TRUE;
+								all_textboxes[i]->pointer_visible = TRUE;
+								all_textboxes[i]->pointer_switch_time = 0.0f;
+							}
+							else if (all_textboxes[i]->clickable)
+							{
+								all_textboxes[i]->clicked = FALSE;
+							}
+						}
+						if (SDL_PointInRectFloat(&cursor, &submit_button.rect) && submit_button.clickable)
+						{
+							name_textbox.clickable = FALSE;
+							for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+							{
+								all_textboxes[i]->clicked = FALSE;
+								reset_element_lerp_data(all_textboxes[i], TYPE_GUI_TEXTBOX);
+							}
+							reset_label_lerp_data(&title);
+							reset_element_lerp_data(&submit_button, TYPE_GUI_BUTTON);
+							submit_button.color = BLACK;
+							program_mode = MODE_MENU;
+
+							uint32 name_size = strlen(name_textbox.input_label.text) + 1;
+
+							orders[customer_index].name = malloc(name_size * sizeof(char));
+							strcpy(orders[customer_index].name, name_textbox.input_label.text);
+
+							printf("Name: %s\n", orders[customer_index].name);
+
+							if (!orders[customer_index].for_pickup)
+							{
+								uint32 address_size = strlen(name_textbox.input_label.text) + 1;
+								
+								orders[customer_index].address = malloc(address_size * sizeof(char));
+								strcpy(orders[customer_index].address, address_textbox.input_label.text);
+
+								orders[customer_index].phone_number = atoi(phone_textbox.input_label.text);
+
+								printf("Name: %s\n", orders[customer_index].address);
+								printf("Name: %d\n", orders[customer_index].phone_number);
+							}
+						}
+						else
+						{
+							real32 alpha = submit_button.color.a;
+							submit_button.color = submit_button.orig_color;
+							submit_button.color.a = alpha;
 						}
 					} break;
 					}
@@ -387,8 +742,6 @@ int main(void)
 		SDL_SetRenderDrawColor(renderer, 230, 230, 255, 255);
 		SDL_RenderClear(renderer);
 
-		render_gui_element(renderer, &title,  TYPE_GUI_LABEL);
-
 		render_gui_element(renderer, &button, TYPE_GUI_BUTTON);
 		render_gui_element(renderer, &button2, TYPE_GUI_BUTTON);
 
@@ -399,15 +752,49 @@ int main(void)
 
 		if (program_mode > MODE_ORDER_TYPE)
 		{
-			render_gui_element(renderer, &textbox, TYPE_GUI_TEXTBOX);
-			if (textbox.clicked)
+			render_gui_element(renderer, &submit_button, TYPE_GUI_BUTTON);
+
+			if (!orders[customer_index].for_pickup)
 			{
-				SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-				SDL_RenderFillRect(renderer, &textbox.pointer);
-				SDL_SetRenderDrawColor(renderer, 230, 230, 255, 255);
+				for (int32 i = 0; i < ALL_TEXTBOXES; i++)
+				{
+					render_gui_element(renderer, all_textboxes[i], TYPE_GUI_TEXTBOX);
+				}
+			}
+			else
+			{
+				render_gui_element(renderer, &name_textbox, TYPE_GUI_TEXTBOX);
 			}
 		}
 
+		if (program_mode >= MODE_MENU)
+		{
+			render_gui_element(renderer, &menu_background, TYPE_GUI_TEXTBOX);
+
+			for (int32 i = 0; i < 12; i++)
+			{
+				SDL_RenderTexture(renderer, pizzas[i].texture, NULL, &pizzas[i].rect);
+			}
+			for (int32 i = 0; i < 12; i++)
+			{
+				SDL_RenderTexture(renderer, pizzas[i].name_label.texture, NULL, &pizzas[i].name_label.rect);
+			}
+			for (int32 i = 0; i < 12; i++)
+			{
+				SDL_RenderTexture(renderer, pizzas[i].price_label.texture, NULL, &pizzas[i].price_label.rect);
+			}
+
+			SDL_RenderTexture(renderer, menu_background.texture, &menu_background.frame_src->frames[0], &menu_background.corners[0]);
+			SDL_RenderTexture(renderer, menu_background.texture, &menu_background.frame_src->frames[2], &menu_background.corners[1]);
+
+			SDL_RenderTexture(renderer, menu_background.texture, &menu_background.frame_src->frames[1], &menu_background.horiz_sides[0]);
+		}
+
+		SDL_SetRenderDrawColor(renderer, 230, 230, 255, 255);
+		SDL_RenderFillRect(renderer, &header);
+		
+		render_gui_element(renderer, &title,  TYPE_GUI_LABEL);
+		
 		// Change the render target back to our screen display
 		SDL_SetRenderTarget(renderer, NULL);
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -416,6 +803,7 @@ int main(void)
 		SDL_RenderTexture(renderer, canvas, NULL, &canvas_rect);
 
 		SDL_RenderPresent(renderer);
+		SDL_StopTextInput(window);
 	}
 
 	// Cleanup function to free used memory, anything declared on the stack.
