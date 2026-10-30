@@ -28,7 +28,12 @@ typedef double real64;
 #define TRUE  1
 #define FALSE 0
 
+#define MINUS 0
+#define PLUS 1
+
 #define PI32 3.141592653589793f
+
+#define MAX_PIZZAS 5
 
 // I am developing with a 1920x1080 screen, passing these values directly is ok because we will resize the screen later.
 #define SCREEN (SDL_FRect){0, 0, 1920, 1080}
@@ -143,15 +148,21 @@ typedef struct
 // Struct to hold data for different pizza types
 typedef struct
 {
+	GUI_Button buttons[2];
+	
 	SDL_Texture *texture;
 
 	GUI_Label name_label;
 	GUI_Label price_label;
 	GUI_Label description_label;
+
+	GUI_Textbox number_display;
 	
 	SDL_FRect rect;
 	
 	real32 price;
+
+	int32 number;
 } Pizza;
 
 // Struct to hold data for all orders done in a session.
@@ -599,7 +610,9 @@ static inline GUI_Button create_button(SDL_Renderer *renderer, TTF_Font *font, S
 	GUI_Button button = {0};
 	
 	button.texture = texture;
-	button.rect = (SDL_FRect){0, 0, 369, 166};
+	button.rect = (SDL_FRect){0};
+	SDL_GetTextureSize(texture, &button.rect.w, &button.rect.h);
+	
 	button.orig_color = color;
 	button.color = color;
 	button.clickable = FALSE;
@@ -739,7 +752,6 @@ static inline void textbox_read_input(SDL_Renderer *renderer, TTF_Font *font, GU
 	textbox->pointer.x = (real32)char_width * textbox->pointer_pos + textbox->input_label.rect.x;
 
 	if (textbox->label.texture) { SDL_DestroyTexture(textbox->input_label.texture); }
-
 	update_text(&textbox->input_label.texture, &textbox->input_label.rect, renderer, font, (SDL_FColor){0, 0, 0, 1.0f}, textbox->input_label.text);
 }
 

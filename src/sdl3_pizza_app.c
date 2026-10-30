@@ -35,9 +35,12 @@ int main(void)
 
 	// Load all the fonts
 	TTF_Font *font = TTF_OpenFont("../fonts/Text.ttf", 80.0f);
+	
 	TTF_Font *textbox_title_font = TTF_OpenFont("../fonts/Text.ttf", 60.0f);
-	TTF_Font *textbox_descr_font = TTF_OpenFont("../fonts/Text.ttf", 30.0f);
-	TTF_Font *textbox_font = TTF_OpenFont("../fonts/Code.ttf", 35.0f);
+	TTF_Font *textbox_subtitle_font = TTF_OpenFont("../fonts/Text.ttf", 30.0f);
+	TTF_Font *textbox_description_font = TTF_OpenFont("../fonts/Text.ttf", 15.0f);
+	
+	TTF_Font *textbox_input_font = TTF_OpenFont("../fonts/Code.ttf", 35.0f);
 
 	// Get operating system to create a window
 	window = SDL_CreateWindow("Pizza App", 1920, 1080, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
@@ -58,8 +61,9 @@ int main(void)
 	/** Initalize SDL end **/
 
 	// Load all the GUI textures
-	SDL_Texture *button_texture  = load_bmp_into_texture("../assets/Button.bmp",  "Button",  renderer);
-	SDL_Texture *textbox_texture = load_bmp_into_texture("../assets/Textbox.bmp", "Textbox", renderer);
+	SDL_Texture *button_texture            = load_bmp_into_texture("../assets/Button.bmp",  "Button",  renderer);
+	SDL_Texture *increment_button_texture  = load_bmp_into_texture("../assets/IncrementButton.bmp",  "Increment Button",  renderer);
+	SDL_Texture *textbox_texture           = load_bmp_into_texture("../assets/Textbox.bmp", "Textbox", renderer);
 
 	// Slice textures into individual frames, this is helpful for animations or 9-splicing
 	Frame_Src textbox_src = create_frame_src(textbox_texture, 18, 18);
@@ -217,24 +221,42 @@ int main(void)
 		"Dusung's Cake"
 	};
 
+	// List of descriptions we will use
+	char *descriptions[12] =
+	{
+		"Classic New York style delight",
+		"Explosion of meat in your mouth",
+		"Famous traditonal recipe",
+		"Don't say we didn't warn you",
+		"Loved dish, vegetarian friendly!",
+		"Gets your heart pumping",
+		"Classic pepperoni served with heaven",
+		"You don't need to hear all this",
+		"If meatlovers wasn't enough",
+		"We made good use of them",
+		"Harpur would love this",
+		"HAPPY BIRTHDAY DUSUNG"
+	};
+
+	// List of prices we will use
 	real32 prices[12] =
 	{
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f,
-		18.0f
+		19.50f,
+		10.50f,
+		14.25f,
+		13.50f,
+		21.00f,
+		20.00f,
+		23.50f,
+		11.00f,
+		16.25f,
+		10.50f,
+		13.25f,
+		17.50
 	};
 
 	/** PIZZA POSITIONAL VARIABLES END **/
-	
+
 	// Initialize all the pizza data so we select them and calculate prices
 	for (int32 i = 0; i < 12; i++)
 	{
@@ -252,28 +274,74 @@ int main(void)
 
 		pizzas[i].name_label.text = malloc(strlen(names[i]) + 1);
 		pizzas[i].name_label.color = BLACK;
-		update_text(&pizzas[i].name_label.texture, &pizzas[i].name_label.rect, renderer, textbox_descr_font, BLACK, names[i]);
+		update_text(&pizzas[i].name_label.texture, &pizzas[i].name_label.rect, renderer, textbox_subtitle_font, BLACK, names[i]);
 		
 		SDL_GetTextureSize(pizzas[i].name_label.texture, &pizzas[i].name_label.rect.w, &pizzas[i].name_label.rect.h);
 
 		center_rect_to(&pizzas[i].name_label.rect, pizzas[i].rect);
-		pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h);
+		pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h / 3);
 
 		pizzas[i].price_label.text = malloc(strlen(price) + 1);
 		pizzas[i].price_label.color = BLACK;
-		update_text(&pizzas[i].price_label.texture, &pizzas[i].price_label.rect, renderer, textbox_descr_font, BLACK, price);
+		update_text(&pizzas[i].price_label.texture, &pizzas[i].price_label.rect, renderer, textbox_subtitle_font, BLACK, price);
 		
 		SDL_GetTextureSize(pizzas[i].price_label.texture, &pizzas[i].price_label.rect.w, &pizzas[i].price_label.rect.h);
 
 		center_rect_to(&pizzas[i].price_label.rect, pizzas[i].rect);
-		pizzas[i].price_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+		pizzas[i].price_label.rect.y = (pizzas[i].name_label.rect.y + pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h / 3);
+
+		pizzas[i].description_label.text = malloc(strlen(descriptions[i]) + 1);
+		pizzas[i].description_label.color = BLACK;
+		update_text(&pizzas[i].description_label.texture, &pizzas[i].description_label.rect, renderer, textbox_description_font, BLACK, descriptions[i]);
+		
+		SDL_GetTextureSize(pizzas[i].description_label.texture, &pizzas[i].description_label.rect.w, &pizzas[i].description_label.rect.h);
+
+		center_rect_to(&pizzas[i].description_label.rect, pizzas[i].rect);
+		pizzas[i].description_label.rect.y = (pizzas[i].price_label.rect.y + pizzas[i].price_label.rect.h) + (pizzas[i].description_label.rect.h / 3);
+
+		pizzas[i].buttons[PLUS]  = create_button(renderer, textbox_input_font, increment_button_texture, "+", DARK_GREEN);
+		pizzas[i].buttons[MINUS] = create_button(renderer, textbox_input_font, increment_button_texture, "-", DARK_RED);
+
+		center_rect_to(&pizzas[i].buttons[PLUS].rect, pizzas[i].rect);
+		center_rect_to(&pizzas[i].buttons[MINUS].rect, pizzas[i].rect);
+
+		pizzas[i].buttons[PLUS].rect.x  = pizzas[i].rect.x + pizzas[i].rect.w - pizzas[i].buttons[PLUS].rect.w;
+		pizzas[i].buttons[MINUS].rect.x = pizzas[i].rect.x;
+
+		pizzas[i].buttons[PLUS].rect.y  = pizzas[i].description_label.rect.y + pizzas[i].description_label.rect.h + (pizzas[i].buttons[PLUS].rect.h * 0.33);
+		pizzas[i].buttons[MINUS].rect.y  = pizzas[i].description_label.rect.y + pizzas[i].description_label.rect.h + (pizzas[i].buttons[MINUS].rect.h * 0.33);
+
+		center_rect_to(&pizzas[i].buttons[PLUS].label.rect, pizzas[i].buttons[PLUS].rect);
+		center_rect_to(&pizzas[i].buttons[MINUS].label.rect, pizzas[i].buttons[MINUS].rect);
+
+		pizzas[i].buttons[PLUS].clickable  = TRUE;
+		pizzas[i].buttons[MINUS].clickable = TRUE;
+
+		pizzas[i].number_display = create_textbox("", BLACK, renderer, textbox_title_font, textbox_texture, &textbox_src, (SDL_FRect){0, 0, 80, 80});
+		center_rect_to(&pizzas[i].number_display.total_rect, pizzas[i].rect);
+		pizzas[i].number_display.total_rect.y = pizzas[i].buttons[PLUS].rect.y;
+		reposition_textbox(&pizzas[i].number_display, renderer, textbox_title_font);
+
+		pizzas[i].number_display.color.a = 1.0f;
+		pizzas[i].number_display.input_label.color = BLACK;
+
+		pizzas[i].number_display.input_label.text[0] = (char)pizzas[i].number + '0';
+
+		pizzas[i].number_display.input_label.orig_color = BLACK;
+
+		pizzas[i].number_display.pointer_pos = 2;
+		
+		if (pizzas[i].number_display.input_label.texture) { SDL_DestroyTexture(pizzas[i].number_display.input_label.texture); }
+		update_text(&pizzas[i].number_display.input_label.texture, &pizzas[i].number_display.input_label.rect, renderer, textbox_input_font, BLACK, pizzas[i].number_display.input_label.text);
+
+		center_rect_to(&pizzas[i].number_display.input_label.rect, pizzas[i].number_display.total_rect);
 		
 		loc_x += IMG_WIDTH + gap_offset;
 
 		if ((i+1) % 3 == 0)
 		{
 			loc_x = origin;
-			loc_y += IMG_HEIGHT + gap_offset;
+			loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h) + pizzas[i].buttons[PLUS].rect.h;
 		}
 	}
 
@@ -303,6 +371,26 @@ int main(void)
 			SDL_SetCursor(cursor_hover);
 			cursor_hovering_button = TRUE;
 		}
+
+		// We'll also check if the menu is active and if any of the pizza's buttons are being hovered in.
+		for (int32 i = 0; i < 12; i++)
+		{
+			if (!SDL_PointInRectFloat(&cursor, &pizzas[i].buttons[PLUS].rect)) { continue; }
+			if (!pizzas[i].buttons[PLUS].clickable) { continue; }
+
+			SDL_SetCursor(cursor_hover);
+			cursor_hovering_button = TRUE;
+		}
+
+		for (int32 i = 0; i < 12; i++)
+		{
+			if (!SDL_PointInRectFloat(&cursor, &pizzas[i].buttons[MINUS].rect)) { continue; }
+			if (!pizzas[i].buttons[MINUS].clickable) { continue; }
+
+			SDL_SetCursor(cursor_hover);
+			cursor_hovering_button = TRUE;
+		}
+		
 		for (int32 i = 0; i < ALL_TEXTBOXES; i++)
 		{
 			if (!SDL_PointInRectFloat(&cursor, &all_textboxes[i]->total_rect)) { continue; }
@@ -431,6 +519,15 @@ int main(void)
 			title.rect.y  = r32_ease_in_out(title.lerp_t, title.start.y, title.end.y);
 			title.color.a = r32_ease_in_out(title.lerp_t, title.alpha_dist.start, title.alpha_dist.end);
 
+			for (int32 i = 0; i < 12; i++)
+			{
+				if (SDL_PointInRectFloat(&cursor, &pizzas[i].buttons[PLUS].rect)) { brighten_color(&pizzas[i].buttons[PLUS].color, pizzas[i].buttons[PLUS].orig_color, &dt, 0.1f); }
+				else                                                              { reset_color(&pizzas[i].buttons[PLUS].color, pizzas[i].buttons[PLUS].orig_color, &dt, 0.1f); }
+
+				if (SDL_PointInRectFloat(&cursor, &pizzas[i].buttons[MINUS].rect)) { brighten_color(&pizzas[i].buttons[MINUS].color, pizzas[i].buttons[MINUS].orig_color, &dt, 0.1f); }
+				else                                                              { reset_color(&pizzas[i].buttons[MINUS].color, pizzas[i].buttons[MINUS].orig_color, &dt, 0.1f); }
+			}
+
 			for (int32 i = 0; i < ALL_TEXTBOXES; i++)
 			{
 				all_textboxes[i]->lerp_t += dt / global_seconds;
@@ -459,6 +556,7 @@ int main(void)
 				title.end   = (v2){{ title.rect.x, SCREEN.h * 0.12 }};
 
 				title.alpha_dist = (v2){{ 0.0f, 1.0f }};
+				
 			}
 		} break;
 		}
@@ -492,7 +590,7 @@ int main(void)
 				{
 					for (int32 i = 0; i < ALL_TEXTBOXES; i++)
 					{
-						if (all_textboxes[i]->clicked) { textbox_read_input(renderer, textbox_font, all_textboxes[i], event.key.key); }
+						if (all_textboxes[i]->clicked) { textbox_read_input(renderer, textbox_input_font, all_textboxes[i], event.key.key); }
 					}
 				} break;
 				}
@@ -504,7 +602,7 @@ int main(void)
 					for (int32 j = 0; event.text.text[j] != '\0'; j++)
 					{
 						char key = event.text.text[j];
-						if (all_textboxes[i]->clicked) { textbox_read_input(renderer, textbox_font, all_textboxes[i], key); }
+						if (all_textboxes[i]->clicked) { textbox_read_input(renderer, textbox_input_font, all_textboxes[i], key); }
 					}
 				}
 			} break;
@@ -531,20 +629,38 @@ int main(void)
 						pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h / 3);
 		
 						center_rect_to(&pizzas[i].price_label.rect, pizzas[i].rect);
-						pizzas[i].price_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+						pizzas[i].price_label.rect.y = (pizzas[i].name_label.rect.y + pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h / 3);
+
+						center_rect_to(&pizzas[i].description_label.rect, pizzas[i].rect);
+						pizzas[i].description_label.rect.y = (pizzas[i].price_label.rect.y + pizzas[i].price_label.rect.h) + (pizzas[i].description_label.rect.h / 3);
+
+						pizzas[i].buttons[PLUS].rect.x  = pizzas[i].rect.x + pizzas[i].rect.w - pizzas[i].buttons[PLUS].rect.w;
+						pizzas[i].buttons[MINUS].rect.x = pizzas[i].rect.x;
+		
+						pizzas[i].buttons[PLUS].rect.y  = pizzas[i].description_label.rect.y + pizzas[i].description_label.rect.h + (pizzas[i].buttons[PLUS].rect.h * 0.33);
+						pizzas[i].buttons[MINUS].rect.y  = pizzas[i].description_label.rect.y + pizzas[i].description_label.rect.h + (pizzas[i].buttons[MINUS].rect.h * 0.33);
+
+						center_rect_to(&pizzas[i].buttons[PLUS].label.rect, pizzas[i].buttons[PLUS].rect);
+						center_rect_to(&pizzas[i].buttons[MINUS].label.rect, pizzas[i].buttons[MINUS].rect);
+
+						center_rect_to(&pizzas[i].number_display.total_rect, pizzas[i].rect);
+						pizzas[i].number_display.total_rect.y = pizzas[i].buttons[PLUS].rect.y;
+						reposition_textbox(&pizzas[i].number_display, renderer, textbox_title_font);
+
+						center_rect_to(&pizzas[i].number_display.input_label.rect, pizzas[i].number_display.total_rect);
 
 						loc_x += IMG_WIDTH + gap_offset;
 
 						if ((i+1) % 3 == 0)
 						{
 							loc_x = origin;
-							loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+							loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h) + pizzas[i].buttons[PLUS].rect.h;
 						}
 					}
 				}
 				else if (scroll_y < 0.0f)
 				{
-					real32 min = -((IMG_HEIGHT * 3) + gap_offset * 2);
+					real32 min = -((IMG_HEIGHT * 3) + (gap_offset * 2) + ((pizzas[0].name_label.rect.h) + ((pizzas[0].price_label.rect.h) + pizzas[0].buttons[PLUS].rect.h) * 4));
 					
 					offset_y -= 25.0f;
 					offset_y = (offset_y < min) ? min : offset_y;
@@ -559,14 +675,32 @@ int main(void)
 						pizzas[i].name_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h / 3);
 
 						center_rect_to(&pizzas[i].price_label.rect, pizzas[i].rect);
-						pizzas[i].price_label.rect.y = (pizzas[i].rect.y + pizzas[i].rect.h) + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+						pizzas[i].price_label.rect.y = (pizzas[i].name_label.rect.y + pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h / 3);
+
+						center_rect_to(&pizzas[i].description_label.rect, pizzas[i].rect);
+						pizzas[i].description_label.rect.y = (pizzas[i].price_label.rect.y + pizzas[i].price_label.rect.h) + (pizzas[i].description_label.rect.h / 3);
+
+						pizzas[i].buttons[PLUS].rect.x  = pizzas[i].rect.x + pizzas[i].rect.w - pizzas[i].buttons[PLUS].rect.w;
+						pizzas[i].buttons[MINUS].rect.x = pizzas[i].rect.x;
+						
+						pizzas[i].buttons[PLUS].rect.y  = pizzas[i].description_label.rect.y + pizzas[i].description_label.rect.h + (pizzas[i].buttons[PLUS].rect.h * 0.33);
+						pizzas[i].buttons[MINUS].rect.y  = pizzas[i].description_label.rect.y + pizzas[i].description_label.rect.h + (pizzas[i].buttons[MINUS].rect.h * 0.33);
+						
+						center_rect_to(&pizzas[i].buttons[PLUS].label.rect, pizzas[i].buttons[PLUS].rect);
+						center_rect_to(&pizzas[i].buttons[MINUS].label.rect, pizzas[i].buttons[MINUS].rect);
+
+						center_rect_to(&pizzas[i].number_display.total_rect, pizzas[i].rect);
+						pizzas[i].number_display.total_rect.y = pizzas[i].buttons[PLUS].rect.y;
+						reposition_textbox(&pizzas[i].number_display, renderer, textbox_title_font);
+
+						center_rect_to(&pizzas[i].number_display.input_label.rect, pizzas[i].number_display.total_rect);
 
 						loc_x += IMG_WIDTH + gap_offset;
 
 						if ((i+1) % 3 == 0)
 						{
 							loc_x = origin;
-							loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h);
+							loc_y += IMG_HEIGHT + gap_offset + (pizzas[i].name_label.rect.h) + (pizzas[i].price_label.rect.h) + pizzas[i].buttons[PLUS].rect.h;
 						}
 					}
 				}
@@ -693,6 +827,8 @@ int main(void)
 						}
 						if (SDL_PointInRectFloat(&cursor, &submit_button.rect) && submit_button.clickable)
 						{
+							submit_button.clickable = FALSE;
+							
 							name_textbox.clickable = FALSE;
 							for (int32 i = 0; i < ALL_TEXTBOXES; i++)
 							{
@@ -729,6 +865,41 @@ int main(void)
 							real32 alpha = submit_button.color.a;
 							submit_button.color = submit_button.orig_color;
 							submit_button.color.a = alpha;
+						}
+					} break;
+					case MODE_MENU:
+					{
+						for (int32 i = 0; i < 12; i++)
+						{
+							if (!SDL_PointInRectFloat(&cursor, &pizzas[i].buttons[PLUS].rect)) { continue; }
+							
+							pizzas[i].buttons[PLUS].color = BLACK;
+
+							if (pizzas[i].number == MAX_PIZZAS) { continue; }
+							pizzas[i].number++;
+
+							pizzas[i].number_display.input_label.text[0] = (char)pizzas[i].number + '0';
+
+							if (pizzas[i].number_display.input_label.texture) { SDL_DestroyTexture(pizzas[i].number_display.input_label.texture); }
+							update_text(&pizzas[i].number_display.input_label.texture, &pizzas[i].number_display.input_label.rect, renderer, textbox_input_font, BLACK, pizzas[i].number_display.input_label.text);
+
+							center_rect_to(&pizzas[i].number_display.input_label.rect, pizzas[i].number_display.total_rect);
+						}
+						for (int32 i = 0; i < 12; i++)
+						{
+							if (!SDL_PointInRectFloat(&cursor, &pizzas[i].buttons[MINUS].rect)) { continue; }
+							
+							pizzas[i].buttons[MINUS].color = BLACK;
+
+							if (pizzas[i].number == 0) { continue; }
+							pizzas[i].number--;
+
+							pizzas[i].number_display.input_label.text[0] = (char)pizzas[i].number + '0';
+
+							if (pizzas[i].number_display.input_label.texture) { SDL_DestroyTexture(pizzas[i].number_display.input_label.texture); }
+							update_text(&pizzas[i].number_display.input_label.texture, &pizzas[i].number_display.input_label.rect, renderer, textbox_input_font, BLACK, pizzas[i].number_display.input_label.text);
+
+							center_rect_to(&pizzas[i].number_display.input_label.rect, pizzas[i].number_display.total_rect);
 						}
 					} break;
 					}
@@ -783,6 +954,20 @@ int main(void)
 			{
 				SDL_RenderTexture(renderer, pizzas[i].price_label.texture, NULL, &pizzas[i].price_label.rect);
 			}
+			for (int32 i = 0; i < 12; i++)
+			{
+				SDL_RenderTexture(renderer, pizzas[i].description_label.texture, NULL, &pizzas[i].description_label.rect);
+			}
+			for (int32 i = 0; i < 12; i++)
+			{
+				render_gui_element(renderer, &pizzas[i].buttons[PLUS], TYPE_GUI_BUTTON);
+				render_gui_element(renderer, &pizzas[i].buttons[MINUS], TYPE_GUI_BUTTON);
+			}
+
+			for (int32 i = 0; i < 12; i++)
+			{
+				render_gui_element(renderer, &pizzas[i].number_display, TYPE_GUI_TEXTBOX);
+			}
 
 			SDL_RenderTexture(renderer, menu_background.texture, &menu_background.frame_src->frames[0], &menu_background.corners[0]);
 			SDL_RenderTexture(renderer, menu_background.texture, &menu_background.frame_src->frames[2], &menu_background.corners[1]);
@@ -808,7 +993,14 @@ int main(void)
 
 	// Cleanup function to free used memory, anything declared on the stack.
 	// e.g. anything NOT using malloc() or calloc() or ISN'T allocated by SDL, which is heap allocation, is cleaned up for us.
-		
+
+	for (int32 i = 0; i < 12; i++)
+	{
+		free(pizzas[i].name_label.text);
+		free(pizzas[i].price_label.text);
+		free(pizzas[i].description_label.text);
+	}
+	
 	SDL_DestroyTexture(title.texture);
 	TTF_CloseFont(font);
 
